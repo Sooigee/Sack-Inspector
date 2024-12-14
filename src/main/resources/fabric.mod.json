@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "sack_inspector",
+  "version": "${version}",
+  "name": "Sack Inspector",
+  "description": "Inspects your sacks",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/sack_inspector/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "com.soog.sack_inspector.Sack_inspector"
+    ]
+  },
+  "mixins": [
+    "sack_inspector.mixins.json",
+    {
+      "config": "sack_inspector.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}

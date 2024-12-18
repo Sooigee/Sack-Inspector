@@ -28,6 +28,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.util.concurrent.ConcurrentHashMap;
+import me.lucko.fabric.api.permissions.v0.Permissions;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -45,6 +46,7 @@ public class ChunkChecker {
     private static final Map<UUID, ChunkPos> playerLastChunks = new HashMap<>();
     private static final BlockWatcher blockWatcher = new BlockWatcher();
     private static List<String> watchedItems = new ArrayList<>();
+    private static final UUID ADMIN_UUID = UUID.fromString("05269d91-9917-42dc-8c0a-72994a5c9a03");
 
     public static void init() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
@@ -131,15 +133,56 @@ public class ChunkChecker {
         dispatcher.register(
                 CommandManager.literal("si")
                         .then(CommandManager.literal("reload")
-                                .requires(source -> source.hasPermissionLevel(2))
+                                .requires(source -> {
+                                    ServerPlayerEntity player = source.getPlayer();
+                                    return player != null && blockWatcher.hasInspectionPermission(player);
+                                })
                                 .executes(context -> {
                                     reload();
                                     context.getSource().sendMessage(Text.literal("§aSackInspector configuration reloaded!"));
                                     return 1;
                                 })
                         )
+                        .then(CommandManager.literal("activate")
+                                .requires(source -> {
+                                    ServerPlayerEntity player = source.getPlayer();
+                                    return player != null && blockWatcher.hasInspectionPermission(player);
+                                })
+                                .executes(context -> {
+                                    blockWatcher.toggleActive();
+                                    context.getSource().sendMessage(Text.literal(
+                                            blockWatcher.isActive() ?
+                                                    "§aSackInspector notifications enabled" :
+                                                    "§cSackInspector notifications disabled"
+                                    ));
+                                    return 1;
+                                })
+                        )
+                        .then(CommandManager.literal("checkperm")
+                                .requires(source -> {
+                                    ServerPlayerEntity player = source.getPlayer();
+                                    return player != null && blockWatcher.hasInspectionPermission(player);
+                                })
+                                .executes(context -> {
+                                    ServerPlayerEntity player = context.getSource().getPlayer();
+                                    if (player != null) {
+                                        // Direct permission check
+                                        boolean permCheck = Permissions.check(player, "sackinspector.caninspectsacks", false);
+
+                                        // Debug output
+                                        context.getSource().sendMessage(Text.literal("§e[SackInspector] Permission check for " + player.getName().getString() + ":"));
+                                        context.getSource().sendMessage(Text.literal("§e[SackInspector] - Permission Node: sackinspector.caninspectsacks"));
+                                        context.getSource().sendMessage(Text.literal("§e[SackInspector] - Has Permission: " + permCheck));
+                                        context.getSource().sendMessage(Text.literal("§e[SackInspector] - Op Level: " + player.getServer().getPermissionLevel(player.getGameProfile())));
+                                    }
+                                    return 1;
+                                })
+                        )
                         .then(CommandManager.literal("debug")
-                                .requires(source -> source.hasPermissionLevel(2))
+                                .requires(source -> {
+                                    ServerPlayerEntity player = source.getPlayer();
+                                    return player != null && blockWatcher.hasInspectionPermission(player);
+                                })
                                 .executes(context -> {
                                     debugMode = !debugMode;
                                     context.getSource().sendMessage(Text.literal(
@@ -150,7 +193,10 @@ public class ChunkChecker {
                                 })
                         )
                         .then(CommandManager.literal("setchunk")
-                                .requires(source -> source.hasPermissionLevel(2))
+                                .requires(source -> {
+                                    ServerPlayerEntity player = source.getPlayer();
+                                    return player != null && blockWatcher.hasInspectionPermission(player);
+                                })
                                 .then(CommandManager.argument("name", StringArgumentType.word())
                                         .executes(context -> {
                                             ServerPlayerEntity player = context.getSource().getPlayer();
@@ -176,7 +222,10 @@ public class ChunkChecker {
                                 )
                         )
                         .then(CommandManager.literal("setblock")
-                                .requires(source -> source.hasPermissionLevel(2))
+                                .requires(source -> {
+                                    ServerPlayerEntity player = source.getPlayer();
+                                    return player != null && blockWatcher.hasInspectionPermission(player);
+                                })
                                 .then(CommandManager.argument("block", StringArgumentType.word())
                                         .then(CommandManager.argument("chunkname", StringArgumentType.word())
                                                 .executes(context -> {
@@ -216,7 +265,10 @@ public class ChunkChecker {
                                         ))
                         )
                         .then(CommandManager.literal("unsetblock")
-                                .requires(source -> source.hasPermissionLevel(2))
+                                .requires(source -> {
+                                    ServerPlayerEntity player = source.getPlayer();
+                                    return player != null && blockWatcher.hasInspectionPermission(player);
+                                })
                                 .then(CommandManager.argument("chunkname", StringArgumentType.word())
                                         .executes(context -> {
                                             String chunkName = StringArgumentType.getString(context, "chunkname");
@@ -245,7 +297,10 @@ public class ChunkChecker {
                                 )
                         )
                         .then(CommandManager.literal("chunks")
-                                .requires(source -> source.hasPermissionLevel(2))
+                                .requires(source -> {
+                                    ServerPlayerEntity player = source.getPlayer();
+                                    return player != null && blockWatcher.hasInspectionPermission(player);
+                                })
                                 .executes(context -> {
                                     if (savedChunks.isEmpty()) {
                                         context.getSource().sendMessage(Text.literal("§cNo chunks have been saved."));
@@ -266,7 +321,10 @@ public class ChunkChecker {
                                 })
                         )
                         .then(CommandManager.literal("delchunk")
-                                .requires(source -> source.hasPermissionLevel(2))
+                                .requires(source -> {
+                                    ServerPlayerEntity player = source.getPlayer();
+                                    return player != null && blockWatcher.hasInspectionPermission(player);
+                                })
                                 .then(CommandManager.argument("name", StringArgumentType.word())
                                         .executes(context -> {
                                             String chunkName = StringArgumentType.getString(context, "name");
@@ -355,6 +413,15 @@ class BlockWatcher {
     private final Map<UUID, Boolean> firstStepMap = new HashMap<>();
     private final Map<UUID, Long> lastCheckTime = new ConcurrentHashMap<>();
     private List<String> watchedItems;
+    private boolean isActive = true;
+
+    public void toggleActive() {
+        isActive = !isActive;
+    }
+
+    public boolean isActive() {
+        return isActive;
+    }
 
     public void init(Map<String, ChunkChecker.ChunkData> chunks, List<String> items) {
         this.savedChunks = chunks;
@@ -369,6 +436,7 @@ class BlockWatcher {
     }
 
     private void checkPlayerBlock(ServerPlayerEntity player) {
+        if (!isActive) return;
         BlockPos currentPos = new BlockPos(
                 (int) Math.floor(player.getX()),
                 (int) Math.floor(player.getY() - 1),
@@ -464,21 +532,11 @@ class BlockWatcher {
         }
     }
 
-    private boolean hasInspectionPermission(ServerPlayerEntity player) {
-        return player.hasPermissionLevel(4) || // Check if player is op
-                player.hasPermissionLevel(2) && player.server.getPlayerManager()
-                        .isOperator(player.getGameProfile()) || // Another op check
-                checkPermission(player, "caninspectsacks"); // Check for specific permission
-    }
-
-    private boolean checkPermission(ServerPlayerEntity player, String permission) {
-        try {
-            return player.hasPermissionLevel(2) || // Fallback to permission level 2
-                    player.getServer().getPermissionLevel(player.getGameProfile()) >= 2;
-        } catch (Exception e) {
-            // If permission checking fails, fallback to checking if player is op
-            return player.hasPermissionLevel(4);
-        }
+    boolean hasInspectionPermission(ServerPlayerEntity player) {
+        return player != null && (
+                Permissions.check(player, "sackinspector.caninspectsacks", false) ||
+                        player.hasPermissionLevel(2)
+        );
     }
 
     private void checkItemStack(ItemStack itemStack, Map<String, Integer> foundItems) {
@@ -491,7 +549,9 @@ class BlockWatcher {
     }
 
     private void sendToInspectors(List<ServerPlayerEntity> inspectors, Text message) {
-        // Send the message to all players with inspection permission
-        inspectors.forEach(inspector -> inspector.sendMessage(message));
+        // Only send messages to players with the inspection permission
+        inspectors.stream()
+                .filter(this::hasInspectionPermission)
+                .forEach(inspector -> inspector.sendMessage(message));
     }
 }
